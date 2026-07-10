@@ -1,0 +1,958 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Serial Log Console</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0d10;
+      --panel: #15191f;
+      --panel-2: #1b2028;
+      --panel-3: #222936;
+      --text: #e8edf3;
+      --muted: #94a1b2;
+      --line: #2a3342;
+      --accent: #45a3ff;
+      --accent-2: #58d68d;
+      --danger: #ff5d6c;
+      --warning: #ffbf47;
+      --shadow: 0 18px 60px rgba(0, 0, 0, .25);
+      --radius: 8px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 12px;
+    }
+
+    [data-theme="light"] {
+      color-scheme: light;
+      --bg: #f5f7fa;
+      --panel: #ffffff;
+      --panel-2: #eef2f7;
+      --panel-3: #e4eaf2;
+      --text: #141922;
+      --muted: #647084;
+      --line: #d8e0ea;
+      --accent: #126fc7;
+      --accent-2: #158a4a;
+      --danger: #c72f43;
+      --warning: #9b6400;
+      --shadow: 0 18px 60px rgba(30, 42, 62, .12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 12% 0%, rgba(69, 163, 255, .12), transparent 28rem),
+        linear-gradient(180deg, var(--bg), var(--bg));
+      color: var(--text);
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      min-height: 30px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 0 10px;
+      background: var(--panel-2);
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    button:hover:not(:disabled) {
+      border-color: color-mix(in srgb, var(--accent) 65%, var(--line));
+      background: var(--panel-3);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: .55;
+    }
+
+    .primary {
+      border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+      background: var(--accent);
+      color: white;
+    }
+
+    .danger {
+      border-color: color-mix(in srgb, var(--danger) 70%, var(--line));
+      color: var(--danger);
+    }
+
+    .app {
+      width: min(1600px, calc(100vw - 28px));
+      height: calc(100vh - 28px);
+      margin: 14px auto;
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      gap: 10px;
+      overflow: hidden;
+    }
+
+    header,
+    .toolbar,
+    .statusbar {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: color-mix(in srgb, var(--panel) 96%, transparent);
+      box-shadow: var(--shadow);
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 12px 14px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .header-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--muted);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--muted) 18%, transparent);
+    }
+
+    .dot.open {
+      background: var(--accent-2);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-2) 20%, transparent);
+    }
+
+    .dot.error {
+      background: var(--danger);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 20%, transparent);
+    }
+
+    .toolbar {
+      padding: 10px;
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 8px;
+      align-items: end;
+    }
+
+    .field {
+      display: grid;
+      gap: 4px;
+    }
+
+    .field label {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1;
+    }
+
+    .span-1 { grid-column: span 1; }
+    .span-2 { grid-column: span 2; }
+    .span-3 { grid-column: span 3; }
+    .span-4 { grid-column: span 4; }
+
+    input,
+    select {
+      width: 100%;
+      min-height: 30px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 0 9px;
+      background: var(--panel-2);
+      color: var(--text);
+      outline: none;
+    }
+
+    input:focus,
+    select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+    }
+
+    .checks {
+      min-height: 30px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--muted);
+    }
+
+    .checks label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .checks input {
+      width: 14px;
+      min-height: 14px;
+      accent-color: var(--accent);
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      align-items: end;
+      flex-wrap: wrap;
+    }
+
+    main {
+      min-height: 0;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: color-mix(in srgb, var(--panel) 96%, transparent);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 1px;
+      background: var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .metric {
+      background: var(--panel);
+      padding: 9px 12px;
+      min-width: 0;
+    }
+
+    .metric .label {
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+
+    .metric .value {
+      margin-top: 2px;
+      font-size: 15px;
+      font-weight: 700;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      position: relative;
+      min-height: 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    thead {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: var(--panel-2);
+      box-shadow: 0 1px 0 var(--line);
+    }
+
+    th,
+    td {
+      padding: 7px 9px;
+      border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+      text-align: left;
+      vertical-align: top;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      font-weight: 700;
+    }
+
+    tbody tr:hover {
+      background: color-mix(in srgb, var(--accent) 8%, transparent);
+    }
+
+    .col-index { width: 58px; }
+    .col-time { width: 120px; }
+    .col-level { width: 94px; }
+    .col-category { width: 120px; }
+    .col-source { width: 170px; }
+    .col-message { width: auto; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      max-width: 100%;
+      height: 20px;
+      border-radius: 999px;
+      padding: 0 8px;
+      font-size: 11px;
+      font-weight: 700;
+      background: var(--panel-3);
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .level-error,
+    .level-fatal {
+      color: var(--danger);
+      background: color-mix(in srgb, var(--danger) 14%, transparent);
+    }
+
+    .level-warn,
+    .level-warning {
+      color: var(--warning);
+      background: color-mix(in srgb, var(--warning) 16%, transparent);
+    }
+
+    .level-info {
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 14%, transparent);
+    }
+
+    .level-debug,
+    .level-trace {
+      color: var(--accent-2);
+      background: color-mix(in srgb, var(--accent-2) 14%, transparent);
+    }
+
+    .malformed td {
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    .empty {
+      position: absolute;
+      inset: 48px 0 0;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      pointer-events: none;
+      text-align: center;
+      padding: 24px;
+    }
+
+    .statusbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 10px;
+      color: var(--muted);
+      overflow: hidden;
+    }
+
+    .statusbar span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 1100px) {
+      .toolbar {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+      }
+
+      .span-4 { grid-column: span 6; }
+      .span-3 { grid-column: span 3; }
+      .span-2 { grid-column: span 2; }
+      .summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 720px) {
+      .app {
+        width: calc(100vw - 16px);
+        height: calc(100vh - 16px);
+        margin: 8px auto;
+      }
+
+      header,
+      .statusbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .toolbar {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .span-1,
+      .span-2,
+      .span-3,
+      .span-4 {
+        grid-column: span 2;
+      }
+
+      .actions {
+        justify-content: flex-start;
+      }
+
+      .summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      table {
+        min-width: 840px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app" data-theme="dark">
+    <header>
+      <div>
+        <h1>Serial Log Console</h1>
+      </div>
+      <div class="header-meta">
+        <span class="dot" id="connectionDot"></span>
+        <span id="connectionText">Disconnected</span>
+      </div>
+    </header>
+
+    <section class="toolbar" aria-label="Controls">
+      <div class="field span-1">
+        <label for="baudRate">Baud</label>
+        <select id="baudRate">
+          <option>9600</option>
+          <option>19200</option>
+          <option>38400</option>
+          <option>57600</option>
+          <option selected>115200</option>
+          <option>230400</option>
+          <option>460800</option>
+          <option>921600</option>
+        </select>
+      </div>
+
+      <div class="field span-1">
+        <label for="levelFilter">Level</label>
+        <select id="levelFilter">
+          <option value="">All</option>
+        </select>
+      </div>
+
+      <div class="field span-1">
+        <label for="categoryFilter">Category</label>
+        <select id="categoryFilter">
+          <option value="">All</option>
+        </select>
+      </div>
+
+      <div class="field span-2">
+        <label for="sourceFilter">Source</label>
+        <select id="sourceFilter">
+          <option value="">All</option>
+        </select>
+      </div>
+
+      <div class="field span-3">
+        <label for="searchInput">Search</label>
+        <input id="searchInput" type="search" placeholder="Find time, level, category, source, or message">
+      </div>
+
+      <div class="field span-2">
+        <label>Options</label>
+        <div class="checks">
+          <label><input id="autoReconnect" type="checkbox" checked> Auto-reconnect</label>
+          <label><input id="autoScroll" type="checkbox" checked> Auto-scroll</label>
+          <label><input id="themeToggle" type="checkbox" checked> Dark</label>
+        </div>
+      </div>
+
+      <div class="actions span-2">
+        <button id="connectBtn" class="primary">Connect</button>
+        <button id="disconnectBtn" disabled>Close</button>
+        <button id="saveBtn">Save</button>
+        <button id="loadBtn">Load</button>
+        <button id="clearBtn" class="danger">Clear</button>
+        <input id="fileInput" class="hidden" type="file" accept=".txt,.log,text/plain">
+      </div>
+    </section>
+
+    <main>
+      <section class="summary" aria-label="Summary">
+        <div class="metric">
+          <div class="label">Total</div>
+          <div class="value" id="totalCount">0</div>
+        </div>
+        <div class="metric">
+          <div class="label">Visible</div>
+          <div class="value" id="visibleCount">0</div>
+        </div>
+        <div class="metric">
+          <div class="label">Errors</div>
+          <div class="value" id="errorCount">0</div>
+        </div>
+        <div class="metric">
+          <div class="label">Warnings</div>
+          <div class="value" id="warnCount">0</div>
+        </div>
+        <div class="metric">
+          <div class="label">Sources</div>
+          <div class="value" id="sourceCount">0</div>
+        </div>
+        <div class="metric">
+          <div class="label">Last Time</div>
+          <div class="value" id="lastTime">-</div>
+        </div>
+      </section>
+
+      <div class="table-wrap" id="tableWrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="col-index">#</th>
+              <th class="col-time">Millis</th>
+              <th class="col-level">Level</th>
+              <th class="col-category">Category</th>
+              <th class="col-source">Source</th>
+              <th class="col-message">Message</th>
+            </tr>
+          </thead>
+          <tbody id="logRows"></tbody>
+        </table>
+        <div class="empty" id="emptyState">No logs loaded.</div>
+      </div>
+    </main>
+
+    <footer class="statusbar">
+      <span id="statusText">Ready. Web Serial works in Chromium browsers on localhost or another secure context.</span>
+      <span id="parseText">Format: [millis]:[level]:[source]:message</span>
+    </footer>
+  </div>
+
+  <script>
+    const app = document.querySelector(".app");
+    const els = {
+      baudRate: document.querySelector("#baudRate"),
+      levelFilter: document.querySelector("#levelFilter"),
+      categoryFilter: document.querySelector("#categoryFilter"),
+      sourceFilter: document.querySelector("#sourceFilter"),
+      searchInput: document.querySelector("#searchInput"),
+      autoReconnect: document.querySelector("#autoReconnect"),
+      autoScroll: document.querySelector("#autoScroll"),
+      themeToggle: document.querySelector("#themeToggle"),
+      connectBtn: document.querySelector("#connectBtn"),
+      disconnectBtn: document.querySelector("#disconnectBtn"),
+      saveBtn: document.querySelector("#saveBtn"),
+      loadBtn: document.querySelector("#loadBtn"),
+      clearBtn: document.querySelector("#clearBtn"),
+      fileInput: document.querySelector("#fileInput"),
+      connectionDot: document.querySelector("#connectionDot"),
+      connectionText: document.querySelector("#connectionText"),
+      totalCount: document.querySelector("#totalCount"),
+      visibleCount: document.querySelector("#visibleCount"),
+      errorCount: document.querySelector("#errorCount"),
+      warnCount: document.querySelector("#warnCount"),
+      sourceCount: document.querySelector("#sourceCount"),
+      lastTime: document.querySelector("#lastTime"),
+      logRows: document.querySelector("#logRows"),
+      emptyState: document.querySelector("#emptyState"),
+      tableWrap: document.querySelector("#tableWrap"),
+      statusText: document.querySelector("#statusText"),
+      parseText: document.querySelector("#parseText")
+    };
+
+    const state = {
+      logs: [],
+      visible: [],
+      port: null,
+      reader: null,
+      readableClosed: null,
+      reconnectTimer: null,
+      keepReading: false,
+      renderPending: false,
+      lineBuffer: "",
+      maxRowsInDom: 2000
+    };
+
+    const parser = /^\[(\d+)\]:\[([^\]]+)\]:\[([^\]]+)\]:(.*)$/;
+
+    function setStatus(text, mode = "idle") {
+      els.statusText.textContent = text;
+      els.connectionDot.classList.toggle("open", mode === "open");
+      els.connectionDot.classList.toggle("error", mode === "error");
+      els.connectionText.textContent = mode === "open" ? "Connected" : mode === "error" ? "Serial error" : "Disconnected";
+    }
+
+    function normalizeValue(value) {
+      return String(value || "").trim();
+    }
+
+    function categoryFromMessage(message) {
+      const trimmed = message.trim();
+      const bracket = trimmed.match(/^\[([A-Za-z0-9_. -]{1,40})\]\s*(.*)$/);
+      if (bracket) return { category: bracket[1].trim(), message: bracket[2] };
+
+      const keyValue = trimmed.match(/^(?:category|cat)\s*[=:]\s*([A-Za-z0-9_.-]{1,40})\s*(.*)$/i);
+      if (keyValue) return { category: keyValue[1].trim(), message: keyValue[2].trim() };
+
+      return { category: "general", message };
+    }
+
+    function parseLine(rawLine) {
+      const raw = rawLine.replace(/\r$/, "");
+      const match = raw.match(parser);
+
+      if (!match) {
+        return {
+          index: state.logs.length + 1,
+          raw,
+          millis: "",
+          level: "malformed",
+          source: "",
+          category: "malformed",
+          message: raw,
+          valid: false
+        };
+      }
+
+      const decoratedMessage = categoryFromMessage(match[4]);
+      return {
+        index: state.logs.length + 1,
+        raw,
+        millis: Number(match[1]),
+        level: normalizeValue(match[2]),
+        source: normalizeValue(match[3]),
+        category: decoratedMessage.category || "general",
+        message: decoratedMessage.message,
+        valid: true
+      };
+    }
+
+    function addLines(text) {
+      const lines = text.split(/\n/);
+      for (const line of lines) {
+        if (line.trim() === "") continue;
+        state.logs.push(parseLine(line));
+      }
+      updateFilterOptions();
+      scheduleRender();
+    }
+
+    function uniqueSorted(field) {
+      return [...new Set(state.logs.map(log => normalizeValue(log[field])).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+    }
+
+    function keepSelection(select, values) {
+      const current = select.value;
+      select.innerHTML = '<option value="">All</option>';
+      for (const value of values) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value;
+        select.appendChild(option);
+      }
+      select.value = values.includes(current) ? current : "";
+    }
+
+    function updateFilterOptions() {
+      keepSelection(els.levelFilter, uniqueSorted("level"));
+      keepSelection(els.categoryFilter, uniqueSorted("category"));
+      keepSelection(els.sourceFilter, uniqueSorted("source"));
+    }
+
+    function logMatches(log) {
+      const search = els.searchInput.value.trim().toLowerCase();
+      if (els.levelFilter.value && log.level !== els.levelFilter.value) return false;
+      if (els.categoryFilter.value && log.category !== els.categoryFilter.value) return false;
+      if (els.sourceFilter.value && log.source !== els.sourceFilter.value) return false;
+      if (!search) return true;
+
+      return [
+        log.index,
+        log.millis,
+        log.level,
+        log.category,
+        log.source,
+        log.message,
+        log.raw
+      ].some(value => String(value).toLowerCase().includes(search));
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function levelClass(level) {
+      return `level-${String(level).toLowerCase().replace(/[^a-z0-9_-]/g, "")}`;
+    }
+
+    function render() {
+      state.renderPending = false;
+      state.visible = state.logs.filter(logMatches);
+      const rows = state.visible.slice(-state.maxRowsInDom);
+      const hiddenCount = state.visible.length - rows.length;
+
+      els.logRows.innerHTML = rows.map(log => `
+        <tr class="${log.valid ? "" : "malformed"}">
+          <td title="${log.index}">${log.index}</td>
+          <td title="${escapeHtml(log.millis)}">${escapeHtml(log.millis)}</td>
+          <td title="${escapeHtml(log.level)}"><span class="badge ${levelClass(log.level)}">${escapeHtml(log.level)}</span></td>
+          <td title="${escapeHtml(log.category)}"><span class="badge">${escapeHtml(log.category)}</span></td>
+          <td title="${escapeHtml(log.source)}">${escapeHtml(log.source)}</td>
+          <td title="${escapeHtml(log.message)}">${escapeHtml(log.message)}</td>
+        </tr>
+      `).join("");
+
+      const errors = state.logs.filter(log => /^(error|fatal)$/i.test(log.level)).length;
+      const warnings = state.logs.filter(log => /^(warn|warning)$/i.test(log.level)).length;
+      const sources = uniqueSorted("source").length;
+      const last = state.logs.at(-1);
+
+      els.totalCount.textContent = state.logs.length.toLocaleString();
+      els.visibleCount.textContent = state.visible.length.toLocaleString();
+      els.errorCount.textContent = errors.toLocaleString();
+      els.warnCount.textContent = warnings.toLocaleString();
+      els.sourceCount.textContent = sources.toLocaleString();
+      els.lastTime.textContent = last && last.millis !== "" ? String(last.millis) : "-";
+      els.emptyState.classList.toggle("hidden", state.logs.length > 0);
+      els.parseText.textContent = hiddenCount > 0
+        ? `Showing latest ${rows.length.toLocaleString()} of ${state.visible.length.toLocaleString()} visible rows`
+        : "Format: [millis]:[level]:[source]:message";
+
+      if (els.autoScroll.checked) {
+        els.tableWrap.scrollTop = els.tableWrap.scrollHeight;
+      }
+    }
+
+    function scheduleRender() {
+      if (state.renderPending) return;
+      state.renderPending = true;
+      requestAnimationFrame(render);
+    }
+
+    async function connect() {
+      if (!("serial" in navigator)) {
+        setStatus("Web Serial is not available in this browser. Use Chrome, Edge, or another Chromium browser.", "error");
+        return;
+      }
+
+      try {
+        clearTimeout(state.reconnectTimer);
+        state.port = await navigator.serial.requestPort();
+        await openSelectedPort();
+      } catch (error) {
+        setStatus(`Connection cancelled or failed: ${error.message}`, "error");
+      }
+    }
+
+    async function openSelectedPort() {
+      if (!state.port) return;
+      const baudRate = Number(els.baudRate.value);
+
+      try {
+        await state.port.open({ baudRate });
+        state.keepReading = true;
+        els.connectBtn.disabled = true;
+        els.disconnectBtn.disabled = false;
+        setStatus(`Reading serial data at ${baudRate} baud.`, "open");
+        readLoop();
+      } catch (error) {
+        setStatus(`Could not open serial port: ${error.message}`, "error");
+        scheduleReconnect();
+      }
+    }
+
+    async function readLoop() {
+      while (state.port && state.port.readable && state.keepReading) {
+        const textDecoder = new TextDecoderStream();
+        state.readableClosed = state.port.readable.pipeTo(textDecoder.writable);
+        state.reader = textDecoder.readable.getReader();
+
+        try {
+          while (true) {
+            const { value, done } = await state.reader.read();
+            if (done) break;
+            if (value) consumeSerialText(value);
+          }
+        } catch (error) {
+          if (state.keepReading) {
+            setStatus(`Serial read failed: ${error.message}`, "error");
+          }
+        } finally {
+          state.reader.releaseLock();
+          state.reader = null;
+          await state.readableClosed.catch(() => {});
+          state.readableClosed = null;
+        }
+      }
+
+      if (state.keepReading) {
+        await closePort(false);
+        scheduleReconnect();
+      }
+    }
+
+    function consumeSerialText(chunk) {
+      state.lineBuffer += chunk;
+      const lines = state.lineBuffer.split(/\n/);
+      state.lineBuffer = lines.pop() || "";
+      addLines(lines.join("\n"));
+    }
+
+    async function closePort(manual = true) {
+      state.keepReading = false;
+      clearTimeout(state.reconnectTimer);
+
+      if (state.reader) {
+        await state.reader.cancel().catch(() => {});
+      }
+
+      if (state.readableClosed) {
+        await state.readableClosed.catch(() => {});
+        state.readableClosed = null;
+      }
+
+      if (state.port) {
+        await state.port.close().catch(() => {});
+      }
+
+      els.connectBtn.disabled = false;
+      els.disconnectBtn.disabled = true;
+      if (manual) setStatus("Disconnected.", "idle");
+    }
+
+    async function scheduleReconnect() {
+      els.connectBtn.disabled = false;
+      els.disconnectBtn.disabled = true;
+
+      if (!els.autoReconnect.checked || !state.port) return;
+
+      setStatus("Serial port closed. Reconnecting in 2 seconds...", "error");
+      clearTimeout(state.reconnectTimer);
+      state.reconnectTimer = setTimeout(async () => {
+        if (!els.autoReconnect.checked || !state.port) return;
+        await openSelectedPort();
+      }, 2000);
+    }
+
+    function saveLogs() {
+      const text = state.logs.map(log => log.raw).join("\n");
+      const blob = new Blob([text, text ? "\n" : ""], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      link.href = url;
+      link.download = `serial-logs-${stamp}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setStatus(`Saved ${state.logs.length.toLocaleString()} log lines.`, state.port && state.keepReading ? "open" : "idle");
+    }
+
+    async function loadLogs(file) {
+      const text = await file.text();
+      addLines(text);
+      setStatus(`Loaded ${file.name}.`, state.port && state.keepReading ? "open" : "idle");
+    }
+
+    function clearLogs() {
+      state.logs = [];
+      state.visible = [];
+      state.lineBuffer = "";
+      updateFilterOptions();
+      scheduleRender();
+      setStatus("Logs cleared.", state.port && state.keepReading ? "open" : "idle");
+    }
+
+    async function restoreGrantedPort() {
+      if (!("serial" in navigator)) return;
+      const ports = await navigator.serial.getPorts();
+      if (ports.length > 0) {
+        state.port = ports[0];
+        setStatus("Previously granted serial port is available. Press Connect to open it.", "idle");
+      }
+    }
+
+    navigator.serial?.addEventListener("disconnect", event => {
+      if (event.target === state.port) {
+        closePort(false).then(scheduleReconnect);
+      }
+    });
+
+    navigator.serial?.addEventListener("connect", () => {
+      if (els.autoReconnect.checked && state.port && !state.keepReading) {
+        scheduleReconnect();
+      }
+    });
+
+    els.connectBtn.addEventListener("click", async () => {
+      if (state.port) {
+        await openSelectedPort();
+      } else {
+        await connect();
+      }
+    });
+
+    els.disconnectBtn.addEventListener("click", () => closePort(true));
+    els.saveBtn.addEventListener("click", saveLogs);
+    els.loadBtn.addEventListener("click", () => els.fileInput.click());
+    els.clearBtn.addEventListener("click", clearLogs);
+    els.fileInput.addEventListener("change", event => {
+      const file = event.target.files[0];
+      if (file) loadLogs(file);
+      event.target.value = "";
+    });
+
+    [els.levelFilter, els.categoryFilter, els.sourceFilter, els.searchInput].forEach(control => {
+      control.addEventListener("input", scheduleRender);
+    });
+
+    els.themeToggle.addEventListener("change", () => {
+      app.dataset.theme = els.themeToggle.checked ? "dark" : "light";
+    });
+
+    restoreGrantedPort().catch(() => {});
+    render();
+  </script>
+</body>
+</html>
