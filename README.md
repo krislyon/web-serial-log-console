@@ -25,6 +25,9 @@ The project is intentionally dependency-free. The entire application lives in `i
 - Keep the table pinned to the latest entries with optional auto-scroll.
 - Preserve malformed lines as visible rows instead of silently discarding them.
 
+## Interface
+![Web Serial Log Console screenshot](images/interface.png)
+
 ## Browser Requirements
 
 Web Serial is only available in browsers that implement the Web Serial API, such as current Chromium-based browsers:
