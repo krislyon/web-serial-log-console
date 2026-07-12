@@ -496,6 +496,8 @@
         <div class="checks">
           <label><input id="autoReconnect" type="checkbox" checked> Auto-reconnect</label>
           <label><input id="autoScroll" type="checkbox" checked> Auto-scroll</label>
+          <label title="Turn off for boards that auto-reset when DTR changes."><input id="dtrSignal" type="checkbox" checked> DTR</label>
+          <label title="Leave off for boards that auto-reset when RTS changes."><input id="rtsSignal" type="checkbox"> RTS</label>
           <label><input id="themeToggle" type="checkbox" checked> Dark</label>
         </div>
       </div>
@@ -572,6 +574,8 @@
       searchInput: document.querySelector("#searchInput"),
       autoReconnect: document.querySelector("#autoReconnect"),
       autoScroll: document.querySelector("#autoScroll"),
+      dtrSignal: document.querySelector("#dtrSignal"),
+      rtsSignal: document.querySelector("#rtsSignal"),
       themeToggle: document.querySelector("#themeToggle"),
       connectBtn: document.querySelector("#connectBtn"),
       disconnectBtn: document.querySelector("#disconnectBtn"),
@@ -790,6 +794,7 @@
 
       try {
         await state.port.open({ baudRate });
+        await applySerialSignals();
         state.keepReading = true;
         els.connectBtn.disabled = true;
         els.disconnectBtn.disabled = false;
@@ -799,6 +804,15 @@
         setStatus(`Could not open serial port: ${error.message}`, "error");
         scheduleReconnect();
       }
+    }
+
+    async function applySerialSignals() {
+      if (!state.port || !state.port.setSignals) return;
+
+      await state.port.setSignals({
+        dataTerminalReady: els.dtrSignal.checked,
+        requestToSend: els.rtsSignal.checked
+      });
     }
 
     async function readLoop() {
@@ -949,6 +963,16 @@
 
     els.themeToggle.addEventListener("change", () => {
       app.dataset.theme = els.themeToggle.checked ? "dark" : "light";
+    });
+
+    [els.dtrSignal, els.rtsSignal].forEach(control => {
+      control.addEventListener("change", () => {
+        if (state.port && state.keepReading) {
+          applySerialSignals().catch(error => {
+            setStatus(`Could not update serial signals: ${error.message}`, "error");
+          });
+        }
+      });
     });
 
     restoreGrantedPort().catch(() => {});
