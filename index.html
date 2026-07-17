@@ -235,6 +235,25 @@
       grid-template-rows: auto 1fr;
     }
 
+    .summary-panel {
+      min-width: 0;
+    }
+
+    .panel-toggle {
+      min-height: 26px;
+      border: 0;
+      border-radius: 0;
+      background: var(--panel-2);
+      color: var(--muted);
+      text-align: left;
+    }
+
+    .summary-toggle {
+      width: 100%;
+      border-bottom: 1px solid var(--line);
+      padding-inline: 12px;
+    }
+
     .summary {
       display: grid;
       grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -373,6 +392,8 @@
     .statusbar {
       display: flex;
       justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
       gap: 12px;
       padding: 8px 10px;
       color: var(--muted);
@@ -383,6 +404,47 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    .parse-pattern {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      flex-basis: 100%;
+      gap: 6px;
+      min-width: min(620px, 55vw);
+    }
+
+    .parse-toggle {
+      white-space: nowrap;
+    }
+
+    #statusText {
+      margin-left: auto;
+    }
+
+    .parse-pattern label { white-space: nowrap; }
+
+    .parse-pattern input {
+      min-width: 240px;
+      min-height: 26px;
+      font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    }
+
+    .parse-pattern input[aria-invalid="true"] {
+      border-color: var(--danger);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 18%, transparent);
+    }
+
+    .parse-pattern button {
+      min-height: 26px;
+      padding: 0 8px;
+    }
+
+    .parse-pattern .parse-help {
+      flex-basis: 100%;
+      text-align: right;
+      font-size: 10px;
     }
 
     .hidden {
@@ -412,6 +474,13 @@
         align-items: flex-start;
         flex-direction: column;
       }
+
+      .parse-pattern {
+        width: 100%;
+        min-width: 0;
+      }
+
+      #statusText { margin-left: 0; }
 
       .toolbar {
         grid-template-columns: 1fr 1fr;
@@ -496,6 +565,7 @@
         <div class="checks">
           <label><input id="autoReconnect" type="checkbox" checked> Auto-reconnect</label>
           <label><input id="autoScroll" type="checkbox" checked> Auto-scroll</label>
+          <label title="Render ANSI terminal color and bold codes in log fields."><input id="ansiColors" type="checkbox"> ANSI colors</label>
           <label title="Turn off for boards that auto-reset when DTR changes."><input id="dtrSignal" type="checkbox" checked> DTR</label>
           <label title="Leave off for boards that auto-reset when RTS changes."><input id="rtsSignal" type="checkbox"> RTS</label>
           <label><input id="themeToggle" type="checkbox" checked> Dark</label>
@@ -513,7 +583,9 @@
     </section>
 
     <main>
-      <section class="summary" aria-label="Summary">
+      <div class="summary-panel">
+        <button id="statsToggleBtn" class="panel-toggle summary-toggle" type="button" aria-expanded="true" aria-controls="statsPanel">Stats &#9662;</button>
+        <section id="statsPanel" class="summary" aria-label="Summary">
         <div class="metric">
           <div class="label">Total</div>
           <div class="value" id="totalCount">0</div>
@@ -538,7 +610,8 @@
           <div class="label">Last Time</div>
           <div class="value" id="lastTime">-</div>
         </div>
-      </section>
+        </section>
+      </div>
 
       <div class="table-wrap" id="tableWrap">
         <table>
@@ -559,8 +632,16 @@
     </main>
 
     <footer class="statusbar">
-      <span id="statusText">Ready. Web Serial works in Chromium browsers on localhost or another secure context.</span>
-      <span id="parseText">Format: [millis]:[level]:[source]:message</span>
+      <button id="parseToggleBtn" class="panel-toggle parse-toggle" type="button" aria-expanded="false" aria-controls="parsePatternForm">Parse pattern &#9656;</button>
+      <span id="statusText"></span>
+      <form id="parsePatternForm" class="parse-pattern hidden">
+        <label for="parsePattern">Parse pattern</label>
+        <input id="parsePattern" type="text" spellcheck="false" title="Named groups: millis, level, source, message">
+        <button type="submit">Apply</button>
+        <button id="meshtasticParsePatternBtn" type="button">Meshtastic</button>
+        <button id="defaultParsePatternBtn" type="button">Default</button>
+        <span class="parse-help">Named groups (any order): millis | level | source | message</span>
+      </form>
     </footer>
   </div>
 
@@ -574,6 +655,7 @@
       searchInput: document.querySelector("#searchInput"),
       autoReconnect: document.querySelector("#autoReconnect"),
       autoScroll: document.querySelector("#autoScroll"),
+      ansiColors: document.querySelector("#ansiColors"),
       dtrSignal: document.querySelector("#dtrSignal"),
       rtsSignal: document.querySelector("#rtsSignal"),
       themeToggle: document.querySelector("#themeToggle"),
@@ -591,11 +673,17 @@
       warnCount: document.querySelector("#warnCount"),
       sourceCount: document.querySelector("#sourceCount"),
       lastTime: document.querySelector("#lastTime"),
+      statsToggleBtn: document.querySelector("#statsToggleBtn"),
+      statsPanel: document.querySelector("#statsPanel"),
       logRows: document.querySelector("#logRows"),
       emptyState: document.querySelector("#emptyState"),
       tableWrap: document.querySelector("#tableWrap"),
       statusText: document.querySelector("#statusText"),
-      parseText: document.querySelector("#parseText")
+      parseToggleBtn: document.querySelector("#parseToggleBtn"),
+      parsePatternForm: document.querySelector("#parsePatternForm"),
+      parsePattern: document.querySelector("#parsePattern"),
+      meshtasticParsePatternBtn: document.querySelector("#meshtasticParsePatternBtn"),
+      defaultParsePatternBtn: document.querySelector("#defaultParsePatternBtn")
     };
 
     const state = {
@@ -607,17 +695,31 @@
       reconnectTimer: null,
       keepReading: false,
       renderPending: false,
+      parseRevision: 0,
       lineBuffer: "",
       maxRowsInDom: 2000
     };
 
-    const parser = /^\[(\d+)\]:\[([^\]]+)\]:\[([^\]]+)\]:(.*)$/;
+    const defaultParsePattern = /^\[(?<millis>\d+)\]:\[(?<level>[^\]]+)\]:\[(?<source>[^\]]+)\]:(?<message>.*)$/.source;
+    const meshtasticParsePattern = /^\s*\*?\s*(?:\x1b\[[0-9;]*m)*(?<level>[A-Z]+)\s*(?:\x1b\[[0-9;]*m)*\|\s*\d{2}:\d{2}:\d{2}\s+(?<millis>\d+)\s*(?:\x1b\[[0-9;]*m)*(?<source>\S+)\s+(?<message>.*?)(?:\x1b\[[0-9;]*m)*\*?\s*$/.source;
+    let parser = new RegExp(defaultParsePattern);
+    els.parsePattern.value = defaultParsePattern;
 
     function setStatus(text, mode = "idle") {
       els.statusText.textContent = text;
       els.connectionDot.classList.toggle("open", mode === "open");
       els.connectionDot.classList.toggle("error", mode === "error");
       els.connectionText.textContent = mode === "open" ? "Connected" : mode === "error" ? "Serial error" : "Disconnected";
+    }
+
+    function setPanelExpanded(button, panel, label, expanded) {
+      button.setAttribute("aria-expanded", String(expanded));
+      button.innerHTML = `${label} ${expanded ? "&#9662;" : "&#9656;"}`;
+      panel.classList.toggle("hidden", !expanded);
+    }
+
+    function togglePanel(button, panel, label) {
+      setPanelExpanded(button, panel, label, button.getAttribute("aria-expanded") !== "true");
     }
 
     function normalizeValue(value) {
@@ -635,13 +737,18 @@
       return { category: "general", message };
     }
 
-    function parseLine(rawLine) {
+    function parseLine(rawLine, index = state.logs.length + 1) {
       const raw = rawLine.replace(/\r$/, "");
       const match = raw.match(parser);
+      const fields = match?.groups && ["millis", "level", "source", "message"].every(name => name in match.groups)
+        ? match.groups
+        : match && match.length >= 5
+          ? { millis: match[1], level: match[2], source: match[3], message: match[4] }
+          : null;
 
-      if (!match) {
+      if (!fields) {
         return {
-          index: state.logs.length + 1,
+          index,
           raw,
           millis: "",
           level: "malformed",
@@ -652,17 +759,63 @@
         };
       }
 
-      const decoratedMessage = categoryFromMessage(match[4]);
+      const decoratedMessage = categoryFromMessage(fields.message);
       return {
-        index: state.logs.length + 1,
+        index,
         raw,
-        millis: Number(match[1]),
-        level: normalizeValue(match[2]),
-        source: normalizeValue(match[3]),
+        millis: Number(fields.millis),
+        level: normalizeValue(fields.level),
+        source: normalizeValue(fields.source),
         category: decoratedMessage.category || "general",
         message: decoratedMessage.message,
         valid: true
       };
+    }
+
+    async function applyParsePattern(patternText) {
+      const revision = ++state.parseRevision;
+
+      try {
+        const nextParser = new RegExp(patternText);
+        parser = nextParser;
+        els.parsePattern.setAttribute("aria-invalid", "false");
+        els.parsePattern.title = "Named groups: millis, level, source, message";
+
+        const rawLines = state.logs.map(log => log.raw);
+        const reparsedLogs = new Array(rawLines.length);
+        const connectionMode = state.port && state.keepReading ? "open" : "idle";
+        setStatus(`Applying parse pattern to ${rawLines.length.toLocaleString()} loaded lines...`, connectionMode);
+
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        let index = 0;
+        while (index < rawLines.length) {
+          if (revision !== state.parseRevision) return;
+          const yieldAt = performance.now() + 10;
+          do {
+            reparsedLogs[index] = parseLine(rawLines[index], index + 1);
+            index += 1;
+          } while (index < rawLines.length && performance.now() < yieldAt);
+          if (index < rawLines.length) {
+            await new Promise(resolve => setTimeout(resolve, 0));
+          }
+        }
+
+        if (revision !== state.parseRevision) return;
+        const newLogs = state.logs.slice(rawLines.length);
+        state.logs = reparsedLogs.concat(newLogs);
+        const matchedCount = state.logs.filter(log => log.valid).length;
+        updateFilterOptions();
+        scheduleRender();
+        const matchStatus = state.logs.length
+          ? ` ${matchedCount.toLocaleString()} of ${state.logs.length.toLocaleString()} loaded lines matched.`
+          : "";
+        setStatus(`Parse pattern applied.${matchStatus}`, connectionMode);
+      } catch (error) {
+        if (revision !== state.parseRevision) return;
+        els.parsePattern.setAttribute("aria-invalid", "true");
+        els.parsePattern.title = error.message;
+        setStatus(`Invalid parse pattern: ${error.message}`, "error");
+      }
     }
 
     function addLines(text) {
@@ -725,6 +878,68 @@
         .replace(/'/g, "&#39;");
     }
 
+    const ansiPattern = /\x1b\[([0-9;]*)m/g;
+    const ansiColors = {
+      30: "#555", 31: "#e06c75", 32: "#98c379", 33: "#e5c07b",
+      34: "#61afef", 35: "#c678dd", 36: "#56b6c2", 37: "#d7dae0",
+      90: "#7f848e", 91: "#ff7a85", 92: "#b3e88c", 93: "#ffd580",
+      94: "#82bfff", 95: "#dc8cff", 96: "#79d9e3", 97: "#fff"
+    };
+
+    function stripAnsi(value) {
+      return String(value ?? "").replace(ansiPattern, "");
+    }
+
+    function applyAnsiCodes(state, codeText) {
+      const codes = codeText === "" ? [0] : codeText.split(";").map(Number);
+      for (const code of codes) {
+        if (code === 0) {
+          state.color = "";
+          state.bold = false;
+        } else if (code === 1) {
+          state.bold = true;
+        } else if (code === 22) {
+          state.bold = false;
+        } else if (code === 39) {
+          state.color = "";
+        } else if (ansiColors[code]) {
+          state.color = ansiColors[code];
+        }
+      }
+    }
+
+    function ansiStateBefore(raw, value) {
+      const plain = stripAnsi(value);
+      const fieldIndex = plain ? raw.indexOf(plain) : 0;
+      const state = { color: "", bold: false };
+      const prefix = fieldIndex >= 0 ? raw.slice(0, fieldIndex) : "";
+      ansiPattern.lastIndex = 0;
+      for (const match of prefix.matchAll(ansiPattern)) applyAnsiCodes(state, match[1]);
+      return state;
+    }
+
+    function ansiHtml(value, raw) {
+      const text = String(value ?? "");
+      if (!els.ansiColors.checked) return escapeHtml(stripAnsi(text));
+
+      const state = ansiStateBefore(raw, text);
+      const parts = [];
+      let start = 0;
+      ansiPattern.lastIndex = 0;
+      for (const match of text.matchAll(ansiPattern)) {
+        if (match.index > start) {
+          const style = `${state.color ? `color:${state.color};` : ""}${state.bold ? "font-weight:700;" : ""}`;
+          parts.push(style ? `<span style="${style}">${escapeHtml(text.slice(start, match.index))}</span>` : escapeHtml(text.slice(start, match.index)));
+        }
+        applyAnsiCodes(state, match[1]);
+        start = match.index + match[0].length;
+      }
+      const style = `${state.color ? `color:${state.color};` : ""}${state.bold ? "font-weight:700;" : ""}`;
+      const tail = text.slice(start);
+      parts.push(style ? `<span style="${style}">${escapeHtml(tail)}</span>` : escapeHtml(tail));
+      return parts.join("");
+    }
+
     function levelClass(level) {
       return `level-${String(level).toLowerCase().replace(/[^a-z0-9_-]/g, "")}`;
     }
@@ -733,16 +948,15 @@
       state.renderPending = false;
       state.visible = state.logs.filter(logMatches);
       const rows = state.visible.slice(-state.maxRowsInDom);
-      const hiddenCount = state.visible.length - rows.length;
 
       els.logRows.innerHTML = rows.map(log => `
         <tr class="${log.valid ? "" : "malformed"}">
           <td title="${log.index}">${log.index}</td>
           <td title="${escapeHtml(log.millis)}">${escapeHtml(log.millis)}</td>
-          <td title="${escapeHtml(log.level)}"><span class="badge ${levelClass(log.level)}">${escapeHtml(log.level)}</span></td>
+          <td title="${escapeHtml(stripAnsi(log.level))}"><span class="badge ${levelClass(log.level)}">${ansiHtml(log.level, log.raw)}</span></td>
           <td title="${escapeHtml(log.category)}"><span class="badge">${escapeHtml(log.category)}</span></td>
-          <td title="${escapeHtml(log.source)}">${escapeHtml(log.source)}</td>
-          <td title="${escapeHtml(log.message)}">${escapeHtml(log.message)}</td>
+          <td title="${escapeHtml(stripAnsi(log.source))}">${ansiHtml(log.source, log.raw)}</td>
+          <td title="${escapeHtml(stripAnsi(log.message))}">${ansiHtml(log.message, log.raw)}</td>
         </tr>
       `).join("");
 
@@ -758,10 +972,6 @@
       els.sourceCount.textContent = sources.toLocaleString();
       els.lastTime.textContent = last && last.millis !== "" ? String(last.millis) : "-";
       els.emptyState.classList.toggle("hidden", state.logs.length > 0);
-      els.parseText.textContent = hiddenCount > 0
-        ? `Showing latest ${rows.length.toLocaleString()} of ${state.visible.length.toLocaleString()} visible rows`
-        : "Format: [millis]:[level]:[source]:message";
-
       if (els.autoScroll.checked) {
         els.tableWrap.scrollTop = els.tableWrap.scrollHeight;
       }
@@ -910,6 +1120,7 @@
     }
 
     function clearLogs() {
+      state.parseRevision += 1;
       state.logs = [];
       state.visible = [];
       state.lineBuffer = "";
@@ -951,13 +1162,27 @@
     els.saveBtn.addEventListener("click", saveLogs);
     els.loadBtn.addEventListener("click", () => els.fileInput.click());
     els.clearBtn.addEventListener("click", clearLogs);
+    els.statsToggleBtn.addEventListener("click", () => togglePanel(els.statsToggleBtn, els.statsPanel, "Stats"));
+    els.parseToggleBtn.addEventListener("click", () => togglePanel(els.parseToggleBtn, els.parsePatternForm, "Parse pattern"));
+    els.parsePatternForm.addEventListener("submit", event => {
+      event.preventDefault();
+      applyParsePattern(els.parsePattern.value);
+    });
+    els.meshtasticParsePatternBtn.addEventListener("click", () => {
+      els.parsePattern.value = meshtasticParsePattern;
+      els.parsePattern.setAttribute("aria-invalid", "false");
+    });
+    els.defaultParsePatternBtn.addEventListener("click", () => {
+      els.parsePattern.value = defaultParsePattern;
+      els.parsePattern.setAttribute("aria-invalid", "false");
+    });
     els.fileInput.addEventListener("change", event => {
       const file = event.target.files[0];
       if (file) loadLogs(file);
       event.target.value = "";
     });
 
-    [els.levelFilter, els.categoryFilter, els.sourceFilter, els.searchInput].forEach(control => {
+    [els.levelFilter, els.categoryFilter, els.sourceFilter, els.searchInput, els.ansiColors].forEach(control => {
       control.addEventListener("input", scheduleRender);
     });
 
